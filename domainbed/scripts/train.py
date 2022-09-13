@@ -1,5 +1,9 @@
 # Copyright (c) Facebook, Inc. and its affiliates. All Rights Reserved
 
+# TODO: train on all the training domain data, 
+#       eval in left-one-out or source-data mode
+#       test on only test domain
+
 import argparse
 import collections
 import json
@@ -42,10 +46,10 @@ if __name__ == "__main__":
     parser.add_argument('--checkpoint_freq', type=int, default=None,
         help='Checkpoint every N steps. Default is dataset-dependent.')
     parser.add_argument('--test_envs', type=int, nargs='+', default=[0])
+    parser.add_argument('--eval_envs', type=int, nargs='+', default=[1])
+    parser.add_argument('--eval_method', type=str, nargs='+', default='leave_one_out')
     parser.add_argument('--output_dir', type=str, default="train_output")
     parser.add_argument('--holdout_fraction', type=float, default=0.2)
-    parser.add_argument('--uda_holdout_fraction', type=float, default=0,
-        help="For domain adaptation, % of test to use unlabeled for training.")
     parser.add_argument('--skip_model_save', action='store_true')
     parser.add_argument('--save_model_every_checkpoint', action='store_true')
     args = parser.parse_args()
@@ -95,9 +99,12 @@ if __name__ == "__main__":
     else:
         device = "cpu"
 
+    if args.eval_method == 'source_domain_data':
+        args.eval_envs = []
+    keep_out_envs = args.test_envs + args.eval_envs
     if args.dataset in vars(datasets):
         dataset = vars(datasets)[args.dataset](args.data_dir,
-            args.test_envs, hparams)
+            keep_out_envs, hparams)
     else:
         raise NotImplementedError
 
@@ -115,33 +122,18 @@ if __name__ == "__main__":
     # be discared at training.
     in_splits = []
     out_splits = []
-    uda_splits = []
     for env_i, env in enumerate(dataset):
-        uda = []
-
         out, in_ = misc.split_dataset(env,
             int(len(env)*args.holdout_fraction),
             misc.seed_hash(args.trial_seed, env_i))
 
-        if env_i in args.test_envs:
-            uda, in_ = misc.split_dataset(in_,
-                int(len(in_)*args.uda_holdout_fraction),
-                misc.seed_hash(args.trial_seed, env_i))
-
         if hparams['class_balanced']:
             in_weights = misc.make_weights_for_balanced_classes(in_)
             out_weights = misc.make_weights_for_balanced_classes(out)
-            if uda is not None:
-                uda_weights = misc.make_weights_for_balanced_classes(uda)
         else:
-            in_weights, out_weights, uda_weights = None, None, None
+            in_weights, out_weights = None, None
         in_splits.append((in_, in_weights))
         out_splits.append((out, out_weights))
-        if len(uda):
-            uda_splits.append((uda, uda_weights))
-
-    if args.task == "domain_adaptation" and len(uda_splits) == 0:
-        raise ValueError("Not enough unlabeled samples for domain adaptation.")
 
     train_loaders = [InfiniteDataLoader(
         dataset=env,
@@ -149,27 +141,63 @@ if __name__ == "__main__":
         batch_size=hparams['batch_size'],
         num_workers=dataset.N_WORKERS)
         for i, (env, env_weights) in enumerate(in_splits)
-        if i not in args.test_envs]
+        if i not in keep_out_envs]
 
-    uda_loaders = [InfiniteDataLoader(
-        dataset=env,
-        weights=env_weights,
-        batch_size=hparams['batch_size'],
-        num_workers=dataset.N_WORKERS)
-        for i, (env, env_weights) in enumerate(uda_splits)]
+    if args.eval_method == 'leave_one_out':
+        eval_loaders = [FastDataLoader(
+            dataset=env,
+            batch_size=64,
+            num_workers=dataset.N_WORKERS)
+            for i, (env, _) in enumerate(in_splits)
+            if i in args.eval_envs]
+        eval_loaders += [FastDataLoader(
+            dataset=env,
+            batch_size=64,
+            num_workers=dataset.N_WORKERS)
+            for i, (env, _) in enumerate(out_splits)
+            if i in args.eval_envs]
 
-    eval_loaders = [FastDataLoader(
+        eval_weights = [None for i, (_, weights) in enumerate(in_splits) 
+            if i in args.eval_envs]
+        eval_weights += [None for i, (_, weights) in enumerate(out_splits) 
+            if i in args.eval_envs]
+
+        eval_loader_names = ['env{}_in'.format(i)
+            for i in range(len(in_splits)) if i in args.eval_envs]
+        eval_loader_names += ['env{}_out'.format(i)
+            for i in range(len(out_splits)) if i in args.eval_envs]
+    elif args.eval_method == 'source_domain_data':
+        eval_loaders = [FastDataLoader(
+            dataset=env,
+            batch_size=64,
+            num_workers=dataset.N_WORKERS)
+            for i, (env, _) in enumerate(in_splits)
+            if i not in keep_out_envs]
+
+        eval_weights = [None for i, (_, weights) in enumerate(in_splits) 
+            if i not in keep_out_envs]
+
+        eval_loader_names = ['env{}_in'.format(i)
+            for i in range(len(in_splits)) if i not in keep_out_envs]
+    else:
+        raise NameError('Evaluation method not found')
+
+    test_loaders = [FastDataLoader(
         dataset=env,
         batch_size=64,
         num_workers=dataset.N_WORKERS)
-        for env, _ in (in_splits + out_splits + uda_splits)]
-    eval_weights = [None for _, weights in (in_splits + out_splits + uda_splits)]
-    eval_loader_names = ['env{}_in'.format(i)
-        for i in range(len(in_splits))]
-    eval_loader_names += ['env{}_out'.format(i)
-        for i in range(len(out_splits))]
-    eval_loader_names += ['env{}_uda'.format(i)
-        for i in range(len(uda_splits))]
+        for i, (env, _) in enumerate(in_splits)
+        if i in args.test_envs]
+    test_loaders += [FastDataLoader(
+        dataset=env,
+        batch_size=64,
+        num_workers=dataset.N_WORKERS)
+        for i, (env, _) in enumerate(out_splits)
+        if i in args.test_envs]
+    test_loader_names = ['env{}_in'.format(i)
+        for i in range(len(in_splits)) if i in args.test_envs]
+    test_loader_names = ['env{}_out'.format(i)
+        for i in range(len(out_splits)) if i in args.test_envs]
 
     algorithm_class = algorithms.get_algorithm_class(args.algorithm)
     algorithm = algorithm_class(dataset.input_shape, dataset.num_classes,
@@ -259,6 +287,35 @@ if __name__ == "__main__":
                 save_checkpoint(f'model_step{step}.pkl')
 
     save_checkpoint('model.pkl')
+
+    # Test performance
+    results = {
+        'step': step,
+        'epoch': step / steps_per_epoch,
+    }
+
+    tests = zip(test_loader_names, test_loaders)
+    for name, loader in evals:
+        acc = misc.accuracy(algorithm, loader, None, device)
+        results[name+'_acc'] = acc
+
+    results['mem_gb'] = torch.cuda.max_memory_allocated() / (1024.*1024.*1024.)
+
+    results_keys = sorted(results.keys())
+    if results_keys != last_results_keys:
+        misc.print_row(results_keys, colwidth=12)
+        last_results_keys = results_keys
+    misc.print_row([results[key] for key in results_keys],
+        colwidth=12)
+
+    results.update({
+        'hparams': hparams,
+        'args': vars(args)
+    })
+
+    epochs_path = os.path.join(args.output_dir, 'test_results.jsonl')
+    with open(epochs_path, 'a') as f:
+        f.write(json.dumps(results, sort_keys=True) + "\n")
 
     with open(os.path.join(args.output_dir, 'done'), 'w') as f:
         f.write('done')
