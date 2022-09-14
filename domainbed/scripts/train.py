@@ -47,7 +47,7 @@ if __name__ == "__main__":
         help='Checkpoint every N steps. Default is dataset-dependent.')
     parser.add_argument('--test_envs', type=int, nargs='+', default=[0])
     parser.add_argument('--eval_envs', type=int, nargs='+', default=[1])
-    parser.add_argument('--eval_method', type=str, nargs='+', default='leave_one_out')
+    parser.add_argument('--eval_method', type=str, default='leave_one_out')
     parser.add_argument('--output_dir', type=str, default="train_output")
     parser.add_argument('--holdout_fraction', type=float, default=0.2)
     parser.add_argument('--skip_model_save', action='store_true')
@@ -107,6 +107,11 @@ if __name__ == "__main__":
             keep_out_envs, hparams)
     else:
         raise NotImplementedError
+    '''
+    torch.set_printoptions(profile="full")
+    print(dataset[0][0][0])
+    torch.set_printoptions(profile="default")
+    '''
 
     # Split each env into an 'in-split' and an 'out-split'. We'll train on
     # each in-split except the test envs, and evaluate on all splits.
@@ -182,22 +187,6 @@ if __name__ == "__main__":
     else:
         raise NameError('Evaluation method not found')
 
-    test_loaders = [FastDataLoader(
-        dataset=env,
-        batch_size=64,
-        num_workers=dataset.N_WORKERS)
-        for i, (env, _) in enumerate(in_splits)
-        if i in args.test_envs]
-    test_loaders += [FastDataLoader(
-        dataset=env,
-        batch_size=64,
-        num_workers=dataset.N_WORKERS)
-        for i, (env, _) in enumerate(out_splits)
-        if i in args.test_envs]
-    test_loader_names = ['env{}_in'.format(i)
-        for i in range(len(in_splits)) if i in args.test_envs]
-    test_loader_names = ['env{}_out'.format(i)
-        for i in range(len(out_splits)) if i in args.test_envs]
 
     algorithm_class = algorithms.get_algorithm_class(args.algorithm)
     algorithm = algorithm_class(dataset.input_shape, dataset.num_classes,
@@ -209,7 +198,6 @@ if __name__ == "__main__":
     algorithm.to(device)
 
     train_minibatches_iterator = zip(*train_loaders)
-    uda_minibatches_iterator = zip(*uda_loaders)
     checkpoint_vals = collections.defaultdict(lambda: [])
 
     steps_per_epoch = min([len(env)/hparams['batch_size'] for env,_ in in_splits])
@@ -236,12 +224,7 @@ if __name__ == "__main__":
         step_start_time = time.time()
         minibatches_device = [(x.to(device), y.to(device))
             for x,y in next(train_minibatches_iterator)]
-        if args.task == "domain_adaptation":
-            uda_device = [x.to(device)
-                for x,_ in next(uda_minibatches_iterator)]
-        else:
-            uda_device = None
-        step_vals = algorithm.update(minibatches_device, uda_device)
+        step_vals = algorithm.update(minibatches_device)
         checkpoint_vals['step_time'].append(time.time() - step_start_time)
 
         for key, val in step_vals.items():
@@ -289,13 +272,29 @@ if __name__ == "__main__":
     save_checkpoint('model.pkl')
 
     # Test performance
+    test_loaders = [FastDataLoader(
+        dataset=env,
+        batch_size=64,
+        num_workers=dataset.N_WORKERS)
+        for i, (env, _) in enumerate(in_splits)
+        if i in args.test_envs]
+    test_loaders += [FastDataLoader(
+        dataset=env,
+        batch_size=64,
+        num_workers=dataset.N_WORKERS)
+        for i, (env, _) in enumerate(out_splits)
+        if i in args.test_envs]
+    test_loader_names = ['env{}_in'.format(i)
+        for i in range(len(in_splits)) if i in args.test_envs]
+    test_loader_names += ['env{}_out'.format(i)
+        for i in range(len(out_splits)) if i in args.test_envs]
     results = {
         'step': step,
         'epoch': step / steps_per_epoch,
     }
 
     tests = zip(test_loader_names, test_loaders)
-    for name, loader in evals:
+    for name, loader in tests:
         acc = misc.accuracy(algorithm, loader, None, device)
         results[name+'_acc'] = acc
 
