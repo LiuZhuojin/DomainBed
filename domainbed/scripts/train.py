@@ -142,13 +142,13 @@ if __name__ == "__main__":
     if args.eval_method == 'leave_one_out':
         eval_loaders = [FastDataLoader(
             dataset=env,
-            batch_size=64,
+            batch_size=hparams['batch_size'],
             num_workers=dataset.N_WORKERS)
             for i, (env, _) in enumerate(in_splits)
             if i in args.eval_envs]
         eval_loaders += [FastDataLoader(
             dataset=env,
-            batch_size=64,
+            batch_size=hparams['batch_size'],
             num_workers=dataset.N_WORKERS)
             for i, (env, _) in enumerate(out_splits)
             if i in args.eval_envs]
@@ -165,7 +165,7 @@ if __name__ == "__main__":
     elif args.eval_method == 'source_domain_data':
         eval_loaders = [FastDataLoader(
             dataset=env,
-            batch_size=64,
+            batch_size=hparams['batch_size'],
             num_workers=dataset.N_WORKERS)
             for i, (env, _) in enumerate(in_splits)
             if i not in keep_out_envs]
@@ -265,13 +265,13 @@ if __name__ == "__main__":
     # Test performance
     test_loaders = [FastDataLoader(
         dataset=env,
-        batch_size=64,
+        batch_size=hparams['batch_size'],
         num_workers=dataset.N_WORKERS)
         for i, (env, _) in enumerate(in_splits)
         if i in args.test_envs]
     test_loaders += [FastDataLoader(
         dataset=env,
-        batch_size=64,
+        batch_size=hparams['batch_size'],
         num_workers=dataset.N_WORKERS)
         for i, (env, _) in enumerate(out_splits)
         if i in args.test_envs]
