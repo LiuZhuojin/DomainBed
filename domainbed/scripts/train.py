@@ -135,7 +135,7 @@ if __name__ == "__main__":
         dataset=env,
         weights=env_weights,
         batch_size=hparams['batch_size'],
-        num_workers=dataset.N_WORKERS)
+        num_workers=0)
         for i, (env, env_weights) in enumerate(in_splits)
         if i not in keep_out_envs]
 
@@ -143,13 +143,13 @@ if __name__ == "__main__":
         eval_loaders = [FastDataLoader(
             dataset=env,
             batch_size=hparams['batch_size'],
-            num_workers=dataset.N_WORKERS)
+            num_workers=0)
             for i, (env, _) in enumerate(in_splits)
             if i in args.eval_envs]
         eval_loaders += [FastDataLoader(
             dataset=env,
             batch_size=hparams['batch_size'],
-            num_workers=dataset.N_WORKERS)
+            num_workers=0)
             for i, (env, _) in enumerate(out_splits)
             if i in args.eval_envs]
 
@@ -166,7 +166,7 @@ if __name__ == "__main__":
         eval_loaders = [FastDataLoader(
             dataset=env,
             batch_size=hparams['batch_size'],
-            num_workers=dataset.N_WORKERS)
+            num_workers=0)
             for i, (env, _) in enumerate(out_splits)
             if i not in keep_out_envs]
 
@@ -266,13 +266,13 @@ if __name__ == "__main__":
     test_loaders = [FastDataLoader(
         dataset=env,
         batch_size=hparams['batch_size'],
-        num_workers=dataset.N_WORKERS)
+        num_workers=0)
         for i, (env, _) in enumerate(in_splits)
         if i in args.test_envs]
     test_loaders += [FastDataLoader(
         dataset=env,
         batch_size=hparams['batch_size'],
-        num_workers=dataset.N_WORKERS)
+        num_workers=0)
         for i, (env, _) in enumerate(out_splits)
         if i in args.test_envs]
     test_loader_names = ['env{}_in'.format(i)
