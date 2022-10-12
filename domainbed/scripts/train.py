@@ -167,14 +167,14 @@ if __name__ == "__main__":
             dataset=env,
             batch_size=hparams['batch_size'],
             num_workers=dataset.N_WORKERS)
-            for i, (env, _) in enumerate(in_splits)
+            for i, (env, _) in enumerate(out_splits)
             if i not in keep_out_envs]
 
-        eval_weights = [None for i, (_, weights) in enumerate(in_splits) 
+        eval_weights = [None for i, (_, weights) in enumerate(out_splits) 
             if i not in keep_out_envs]
 
-        eval_loader_names = ['env{}_in'.format(i)
-            for i in range(len(in_splits)) if i not in keep_out_envs]
+        eval_loader_names = ['env{}_out'.format(i)
+            for i in range(len(out_splits)) if i not in keep_out_envs]
     else:
         raise NameError('Evaluation method not found')
 
