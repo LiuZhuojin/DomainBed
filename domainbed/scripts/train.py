@@ -211,6 +211,7 @@ if __name__ == "__main__":
 
 
     last_results_keys = None
+    best_acc = 0
     for step in range(start_step, n_steps):
         step_start_time = time.time()
         minibatches_device = [(x.to(device), y.to(device))
@@ -231,9 +232,19 @@ if __name__ == "__main__":
                 results[key] = np.mean(val)
 
             evals = zip(eval_loader_names, eval_loaders, eval_weights)
+            data_num = []
+            loader_acc = []
             for name, loader, weights in evals:
+                data_num.append(len(loader.dataset))
                 acc = misc.accuracy(algorithm, loader, weights, device)
+                loader_acc = []
                 results[name+'_acc'] = acc
+            eval_acc = 0
+            for i in range(len(data_num)):
+                eval_acc += data_num[i] / sum(data_num) * loader_acc[i]
+            if eval_acc > best_acc:
+                best_acc = eval_acc
+
 
             results['mem_gb'] = torch.cuda.max_memory_allocated() / (1024.*1024.*1024.)
 
@@ -261,6 +272,9 @@ if __name__ == "__main__":
                 save_checkpoint(f'model_step{step}.pkl')
 
     save_checkpoint('model.pkl')
+    epochs_path = os.path.join(args.output_dir, 'results.jsonl')
+    with open(epochs_path, 'a') as f:
+        f.write('best_acc: ' + str(best_acc) + '\n')
 
     # Test performance
     test_loaders = [FastDataLoader(
