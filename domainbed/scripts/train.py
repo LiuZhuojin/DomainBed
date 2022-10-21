@@ -235,7 +235,7 @@ if __name__ == "__main__":
             data_num = []
             loader_acc = []
             for name, loader, weights in evals:
-                data_num.append(len(loader.dataset))
+                data_num.append(len(loader) * hparams['batch_size'])
                 acc = misc.accuracy(algorithm, loader, weights, device)
                 loader_acc = []
                 results[name+'_acc'] = acc
