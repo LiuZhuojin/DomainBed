@@ -222,7 +222,7 @@ if __name__ == "__main__":
         for key, val in step_vals.items():
             checkpoint_vals[key].append(val)
 
-        if (step % checkpoint_freq == 0) or (step == n_steps - 1):
+        if (step % checkpoint_freq == 0) or (step == n_steps - 1) or (step == n_steps // 10):
             results = {
                 'step': step,
                 'epoch': step / steps_per_epoch,
@@ -259,6 +259,57 @@ if __name__ == "__main__":
                 'hparams': hparams,
                 'args': vars(args)
             })
+
+            if step % (n_steps // 10) == 0:
+                with open(f'eval_performance_step{step}.jsonl', 'a') as f:
+                    f.write(json.dumps(results, sort_keys=True) + "\n")
+                # Test performance
+                test_loaders = [FastDataLoader(
+                    dataset=env,
+                    batch_size=hparams['batch_size'],
+                    num_workers=0)
+                    for i, (env, _) in enumerate(in_splits)
+                    if i in args.test_envs]
+                test_loaders += [FastDataLoader(
+                    dataset=env,
+                    batch_size=hparams['batch_size'],
+                    num_workers=0)
+                    for i, (env, _) in enumerate(out_splits)
+                    if i in args.test_envs]
+                test_loader_names = ['env{}_in'.format(i)
+                    for i in range(len(in_splits)) if i in args.test_envs]
+                test_loader_names += ['env{}_out'.format(i)
+                    for i in range(len(out_splits)) if i in args.test_envs]
+                results = {
+                    'step': step,
+                    'epoch': step / steps_per_epoch,
+                }
+
+                tests = zip(test_loader_names, test_loaders)
+                for name, loader in tests:
+                    acc = misc.accuracy(algorithm, loader, None, device)
+                    results[name+'_acc'] = acc
+
+                results['mem_gb'] = torch.cuda.max_memory_allocated() / (1024.*1024.*1024.)
+
+                results_keys = sorted(results.keys())
+                if results_keys != last_results_keys:
+                    misc.print_row(results_keys, colwidth=12)
+                    last_results_keys = results_keys
+                misc.print_row([results[key] for key in results_keys],
+                    colwidth=12)
+
+                results.update({
+                    'hparams': hparams,
+                    'args': vars(args)
+                })
+                epochs_path = os.path.join(args.output_dir, f'test_step{step}.jsonl')
+                with open(epochs_path, 'a') as f:
+                    f.write(json.dumps(results, sort_keys=True) + "\n")
+
+    epochs_path = os.path.join(args.output_dir, 'test_results.jsonl')
+    with open(epochs_path, 'a') as f:
+        f.write(json.dumps(results, sort_keys=True) + "\n")
 
             epochs_path = os.path.join(args.output_dir, 'results.jsonl')
             with open(epochs_path, 'a') as f:
