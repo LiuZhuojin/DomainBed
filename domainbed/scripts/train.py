@@ -261,7 +261,8 @@ if __name__ == "__main__":
             })
 
             if step % (n_steps // 10) == 0:
-                with open(f'eval_performance_step{step}.jsonl', 'a') as f:
+                epochs_path = os.path.join(args.output_dir, f'eval_step{step}.jsonl')
+                with open(epochs_path, 'a') as f:
                     f.write(json.dumps(results, sort_keys=True) + "\n")
                 # Test performance
                 test_loaders = [FastDataLoader(
