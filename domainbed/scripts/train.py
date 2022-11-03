@@ -308,10 +308,6 @@ if __name__ == "__main__":
                 with open(epochs_path, 'a') as f:
                     f.write(json.dumps(results, sort_keys=True) + "\n")
 
-    epochs_path = os.path.join(args.output_dir, 'test_results.jsonl')
-    with open(epochs_path, 'a') as f:
-        f.write(json.dumps(results, sort_keys=True) + "\n")
-
             epochs_path = os.path.join(args.output_dir, 'results.jsonl')
             with open(epochs_path, 'a') as f:
                 f.write(json.dumps(results, sort_keys=True) + "\n")
